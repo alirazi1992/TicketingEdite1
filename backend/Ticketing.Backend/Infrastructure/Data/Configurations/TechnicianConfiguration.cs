@@ -31,6 +31,14 @@ public class TechnicianConfiguration : IEntityTypeConfiguration<Technician>
             .IsRequired()
             .HasDefaultValue(true);
 
+        builder.Property(t => t.IsDeleted)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(t => t.DeletedAt);
+
+        builder.Property(t => t.DeletedByUserId);
+
         builder.Property(t => t.CreatedAt)
             .IsRequired();
 
@@ -47,4 +55,3 @@ public class TechnicianConfiguration : IEntityTypeConfiguration<Technician>
             .OnDelete(DeleteBehavior.SetNull);
     }
 }
-

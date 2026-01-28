@@ -160,6 +160,18 @@ public class UserService : IUserService
             return null;
         }
 
+        if (user.Role == UserRole.Technician)
+        {
+            var technicianProfile = await _context.Technicians
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.UserId == user.Id);
+
+            if (technicianProfile?.IsDeleted == true)
+            {
+                return null;
+            }
+        }
+
         return new AuthResponse
         {
             Token = _jwtTokenGenerator.GenerateToken(user),
@@ -185,8 +197,17 @@ public class UserService : IUserService
     {
         return await _context.Users
             .Where(u => u.Role == UserRole.Technician)
-            .OrderBy(u => u.FullName)
-            .Select(u => MapToDto(u))
+            .GroupJoin(
+                _context.Technicians,
+                user => user.Id,
+                technician => technician.UserId,
+                (user, technicians) => new { user, technicians })
+            .SelectMany(
+                x => x.technicians.DefaultIfEmpty(),
+                (x, technician) => new { x.user, technician })
+            .Where(result => result.technician == null || !result.technician.IsDeleted)
+            .OrderBy(result => result.user.FullName)
+            .Select(result => MapToDto(result.user))
             .ToListAsync();
     }
 

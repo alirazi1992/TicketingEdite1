@@ -296,7 +296,7 @@ public class TicketService : ITicketService
         var technician = await _context.Technicians
             .FirstOrDefaultAsync(t => t.Id == technicianId);
         
-        if (technician == null || !technician.IsActive || technician.UserId == null)
+        if (technician == null || technician.IsDeleted || !technician.IsActive || technician.UserId == null)
         {
             return null; // Technician not found or inactive
         }
@@ -634,7 +634,7 @@ public class TicketService : ITicketService
         }
         else
         {
-            var technician = await _context.Technicians.FirstOrDefaultAsync(t => t.UserId == assignedUserId);
+            var technician = await _context.Technicians.FirstOrDefaultAsync(t => t.UserId == assignedUserId && !t.IsDeleted);
             ticket.TechnicianId = technician?.Id;
         }
 

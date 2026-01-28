@@ -44,7 +44,7 @@ public class SmartAssignmentService : ISmartAssignmentService
         // Get all active technicians that have a linked User account (UserId != null)
         // Technicians without UserId cannot be assigned - it would leave AssignedToUserId null
         var eligibleTechnicians = await _context.Technicians
-            .Where(t => t.IsActive && t.UserId != null)
+            .Where(t => t.IsActive && !t.IsDeleted && t.UserId != null)
             .ToListAsync();
 
         if (eligibleTechnicians.Count == 0)

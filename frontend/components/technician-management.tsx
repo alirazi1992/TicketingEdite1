@@ -29,6 +29,7 @@ import {
   createTechnician,
   updateTechnician,
   updateTechnicianStatus,
+  deleteTechnician,
 } from "@/lib/technicians-api"
 import type { ApiTechnicianResponse } from "@/lib/api-types"
 import { Search, Plus, Edit, Trash2, UserCheck, UserX } from "lucide-react"
@@ -42,7 +43,10 @@ export function TechnicianManagement() {
   const [searchQuery, setSearchQuery] = useState("")
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
   const [selectedTechnician, setSelectedTechnician] = useState<ApiTechnicianResponse | null>(null)
+  const [technicianToRemove, setTechnicianToRemove] = useState<ApiTechnicianResponse | null>(null)
+  const [removingTechnicianId, setRemovingTechnicianId] = useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -214,6 +218,47 @@ export function TechnicianManagement() {
     }
   }
 
+  const openRemoveDialog = (technician: ApiTechnicianResponse) => {
+    setTechnicianToRemove(technician)
+    setRemoveDialogOpen(true)
+  }
+
+  const handleRemoveTechnician = async () => {
+    if (!token || !technicianToRemove) {
+      toast({
+        title: "خطا",
+        description: "لطفاً ابتدا وارد سیستم شوید",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (removingTechnicianId === technicianToRemove.id) {
+      return
+    }
+
+    setRemovingTechnicianId(technicianToRemove.id)
+    try {
+      await deleteTechnician(token, technicianToRemove.id)
+      toast({
+        title: "تکنسین حذف شد",
+        description: `${technicianToRemove.fullName} با موفقیت حذف شد`,
+      })
+      setRemoveDialogOpen(false)
+      setTechnicianToRemove(null)
+      await loadTechnicians()
+    } catch (error: any) {
+      console.error("[TechnicianManagement] Failed to remove technician:", error)
+      toast({
+        title: "خطا در حذف تکنسین",
+        description: error?.message || "لطفاً دوباره تلاش کنید",
+        variant: "destructive",
+      })
+    } finally {
+      setRemovingTechnicianId(null)
+    }
+  }
+
   const resetForm = () => {
     setFormData({
       fullName: "",
@@ -349,6 +394,15 @@ export function TechnicianManagement() {
                                 فعال
                               </>
                             )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openRemoveDialog(technician)}
+                            className="gap-1 text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            حذف
                           </Button>
                         </div>
                       </TableCell>
@@ -530,7 +584,42 @@ export function TechnicianManagement() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Remove Dialog */}
+      <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+        <DialogContent className="max-w-lg" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-right">حذف تکنسین</DialogTitle>
+            <DialogDescription className="text-right">
+              آیا از حذف این تکنسین مطمئن هستید؟ این عملیات به صورت حذف نرم انجام می‌شود و
+              امکان بازگردانی در آینده وجود دارد.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
+              تکنسین حذف شده دیگر در لیست تکنسین‌های فعال و پیشنهادهای تعیین تکنسین نمایش داده نمی‌شود.
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRemoveDialogOpen(false)
+                  setTechnicianToRemove(null)
+                }}
+              >
+                انصراف
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleRemoveTechnician}
+                disabled={!technicianToRemove || removingTechnicianId === technicianToRemove?.id}
+              >
+                {removingTechnicianId === technicianToRemove?.id ? "در حال حذف..." : "تایید حذف"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-
