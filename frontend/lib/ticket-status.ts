@@ -5,24 +5,30 @@
  * Backend stores statuses as English enum keys, but frontend displays Persian labels.
  */
 
-export type TicketStatus = "Submitted" | "Viewed" | "Open" | "InProgress" | "Resolved" | "Closed"
+export type TicketStatus =
+  | "Submitted"
+  | "SeenRead"
+  | "Open"
+  | "InProgress"
+  | "AnsweredSolved"
+  | "Redo"
 
 export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   Submitted: "ثبت شد",
-  Viewed: "مشاهده شد",
+  SeenRead: "دیده شد",
   Open: "باز",
   InProgress: "در حال انجام",
-  Resolved: "حل شده",
-  Closed: "بسته",
+  AnsweredSolved: "پاسخ داده شد",
+  Redo: "نیاز به بازبینی",
 }
 
 export const TICKET_STATUS_OPTIONS: Array<{ value: TicketStatus; label: string }> = [
   { value: "Submitted", label: TICKET_STATUS_LABELS.Submitted },
-  { value: "Viewed", label: TICKET_STATUS_LABELS.Viewed },
+  { value: "SeenRead", label: TICKET_STATUS_LABELS.SeenRead },
   { value: "Open", label: TICKET_STATUS_LABELS.Open },
   { value: "InProgress", label: TICKET_STATUS_LABELS.InProgress },
-  { value: "Resolved", label: TICKET_STATUS_LABELS.Resolved },
-  { value: "Closed", label: TICKET_STATUS_LABELS.Closed },
+  { value: "AnsweredSolved", label: TICKET_STATUS_LABELS.AnsweredSolved },
+  { value: "Redo", label: TICKET_STATUS_LABELS.Redo },
 ]
 
 /**
@@ -31,7 +37,6 @@ export const TICKET_STATUS_OPTIONS: Array<{ value: TicketStatus; label: string }
 export function getTicketStatusLabel(status: TicketStatus): string {
   return TICKET_STATUS_LABELS[status] || status
 }
-
 
 
 

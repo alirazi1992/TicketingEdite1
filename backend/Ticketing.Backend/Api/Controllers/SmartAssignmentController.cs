@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Ticketing.Backend.Application.DTOs;
@@ -20,6 +21,16 @@ public class SmartAssignmentController : ControllerBase
     {
         _systemSettingsService = systemSettingsService;
         _smartAssignmentService = smartAssignmentService;
+    }
+
+    private Guid? GetCurrentUserId()
+    {
+        var idValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (Guid.TryParse(idValue, out var userId))
+        {
+            return userId;
+        }
+        return null;
     }
 
     /// <summary>
@@ -103,6 +114,12 @@ public class SmartAssignmentController : ControllerBase
     {
         try
         {
+            var userId = GetCurrentUserId();
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
+
             // Check if smart assignment is enabled
             var settings = await _systemSettingsService.GetSystemSettingsAsync();
             if (!settings.AutoAssignEnabled)
@@ -110,7 +127,7 @@ public class SmartAssignmentController : ControllerBase
                 return BadRequest(new { message = "سیستم تعیین هوشمند غیرفعال است. لطفاً ابتدا آن را فعال کنید." });
             }
 
-            int assignedCount = await _smartAssignmentService.AssignUnassignedTicketsAsync(start, end);
+            int assignedCount = await _smartAssignmentService.AssignUnassignedTicketsAsync(userId.Value, start, end);
 
             return Ok(new SmartAssignmentRunResponse
             {
@@ -124,4 +141,3 @@ public class SmartAssignmentController : ControllerBase
         }
     }
 }
-

@@ -8,6 +8,7 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketMessage> TicketMessages => Set<TicketMessage>();
+    public DbSet<TicketActivity> TicketActivities => Set<TicketActivity>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Subcategory> Subcategories => Set<Subcategory>();
     public DbSet<Attachment> Attachments => Set<Attachment>();

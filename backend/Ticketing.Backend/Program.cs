@@ -123,6 +123,22 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(jwtSettings.Secret))
     };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/ticket"))
+            {
+                context.Token = accessToken;
+            }
+
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddAuthorization();
@@ -162,6 +178,7 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 });
 
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSignalR();
 
 // =======================
 // Swagger + JWT Configuration (SECURITY-CRITICAL)
@@ -232,5 +249,6 @@ app.UseAuthorization();
 app.MapGet("/api/ping", () => Results.Ok(new { message = "pong" }));
 
 app.MapControllers();
+app.MapHub<Ticketing.Backend.Api.Hubs.TicketHub>("/hubs/ticket");
 
 app.Run();

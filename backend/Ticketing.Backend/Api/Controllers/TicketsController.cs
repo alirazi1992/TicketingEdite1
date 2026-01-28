@@ -120,7 +120,13 @@ public class TicketsController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        var ticket = await _ticketService.AssignTicketAsync(id, request.TechnicianId);
+        var context = GetUserContext();
+        if (context == null)
+        {
+            return Unauthorized();
+        }
+
+        var ticket = await _ticketService.AssignTicketAsync(id, request.TechnicianId, context.Value.userId);
         if (ticket == null)
         {
             return BadRequest("Ticket not found or technician is inactive");
@@ -133,7 +139,13 @@ public class TicketsController : ControllerBase
     [Obsolete("Use PUT /api/tickets/{id}/assign-technician instead")]
     public async Task<IActionResult> AssignTicket(Guid id, [FromBody] Guid technicianId)
     {
-        var ticket = await _ticketService.AssignTicketAsync(id, technicianId);
+        var context = GetUserContext();
+        if (context == null)
+        {
+            return Unauthorized();
+        }
+
+        var ticket = await _ticketService.AssignTicketAsync(id, technicianId, context.Value.userId);
         if (ticket == null)
         {
             return NotFound();

@@ -13,6 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "@/hooks/use-toast"
+import { TICKET_STATUS_LABELS } from "@/lib/ticket-status"
+import type { TicketStatus } from "@/types"
 import {
   Search,
   Filter,
@@ -36,22 +38,22 @@ import type { LucideIcon } from "lucide-react"
 
 const statusColors: Record<TicketStatus, string> = {
   Submitted: "bg-blue-100 text-blue-800 border-blue-200",
-  Viewed: "bg-purple-100 text-purple-800 border-purple-200",
+  SeenRead: "bg-purple-100 text-purple-800 border-purple-200",
   Open: "bg-red-100 text-red-800 border-red-200",
   InProgress: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  Resolved: "bg-green-100 text-green-800 border-green-200",
-  Closed: "bg-gray-100 text-gray-800 border-gray-200",
+  AnsweredSolved: "bg-green-100 text-green-800 border-green-200",
+  Redo: "bg-orange-100 text-orange-800 border-orange-200",
 }
 
 const statusLabels: Record<TicketStatus, string> = TICKET_STATUS_LABELS
 
 const statusIcons: Record<TicketStatus, LucideIcon> = {
   Submitted: AlertCircle,
-  Viewed: Eye,
+  SeenRead: Eye,
   Open: AlertCircle,
   InProgress: Clock,
-  Resolved: CheckCircle,
-  Closed: XCircle,
+  AnsweredSolved: CheckCircle,
+  Redo: XCircle,
 }
 
 const priorityColors: Record<string, string> = {
@@ -192,8 +194,8 @@ export function AdminTicketList({ tickets, onTicketUpdate }: AdminTicketListProp
             <p>${tickets.filter((t) => t.status === "InProgress").length}</p>
           </div>
           <div class="stat-box">
-            <h3>حل شده</h3>
-            <p>${tickets.filter((t) => t.status === "Resolved" || t.status === "Closed").length}</p>
+            <h3>پاسخ داده شد</h3>
+            <p>${tickets.filter((t) => t.status === "AnsweredSolved").length}</p>
           </div>
         </div>
 
@@ -335,10 +337,12 @@ export function AdminTicketList({ tickets, onTicketUpdate }: AdminTicketListProp
               </SelectTrigger>
               <SelectContent className="font-iran">
                 <SelectItem value="all">همه وضعیت‌ها</SelectItem>
-                <SelectItem value="open">باز</SelectItem>
-                <SelectItem value="in-progress">در حال انجام</SelectItem>
-                <SelectItem value="resolved">حل شده</SelectItem>
-                <SelectItem value="closed">بسته</SelectItem>
+                <SelectItem value="Submitted">{statusLabels.Submitted}</SelectItem>
+                <SelectItem value="SeenRead">{statusLabels.SeenRead}</SelectItem>
+                <SelectItem value="Open">{statusLabels.Open}</SelectItem>
+                <SelectItem value="InProgress">{statusLabels.InProgress}</SelectItem>
+                <SelectItem value="AnsweredSolved">{statusLabels.AnsweredSolved}</SelectItem>
+                <SelectItem value="Redo">{statusLabels.Redo}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -400,19 +404,19 @@ export function AdminTicketList({ tickets, onTicketUpdate }: AdminTicketListProp
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleBulkStatusUpdate("Resolved")}
+                  onClick={() => handleBulkStatusUpdate("AnsweredSolved")}
                   variant="outline"
                   className="font-iran"
                 >
-                  حل شده
+                  پاسخ داده شد
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleBulkStatusUpdate("Closed")}
+                  onClick={() => handleBulkStatusUpdate("Redo")}
                   variant="outline"
                   className="font-iran"
                 >
-                  بسته
+                  نیاز به بازبینی
                 </Button>
               </div>
             </div>

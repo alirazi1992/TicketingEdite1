@@ -115,11 +115,11 @@ const statusLabels = TICKET_STATUS_LABELS;
 
 const statusColors: Record<string, string> = {
   Submitted: "bg-blue-100 text-blue-700 border border-blue-200",
-  Viewed: "bg-cyan-100 text-cyan-700 border border-cyan-200",
+  SeenRead: "bg-cyan-100 text-cyan-700 border border-cyan-200",
   Open: "bg-rose-100 text-rose-700 border border-rose-200",
   InProgress: "bg-amber-100 text-amber-700 border border-amber-200",
-  Resolved: "bg-emerald-100 text-emerald-700 border border-emerald-200",
-  Closed: "bg-slate-100 text-slate-700 border border-slate-200",
+  AnsweredSolved: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  Redo: "bg-orange-100 text-orange-700 border border-orange-200",
 };
 
 const statusCountText: Record<StatusBucket, string> = {

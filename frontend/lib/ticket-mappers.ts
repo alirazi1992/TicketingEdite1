@@ -1,27 +1,33 @@
-import type { ApiTicketMessageDto, ApiTicketPriority, ApiTicketResponse, ApiTicketStatus } from "@/lib/api-types"
+import type {
+  ApiTicketActivityDto,
+  ApiTicketMessageDto,
+  ApiTicketPriority,
+  ApiTicketResponse,
+  ApiTicketStatus,
+} from "@/lib/api-types"
 import type { CategoriesData } from "@/services/categories-types"
 import type { Ticket, TicketPriority, TicketResponse } from "@/types"
 import type { TicketStatus } from "@/lib/ticket-status"
 
 // Direct mapping: API statuses now match frontend status type exactly
-// Backend sends: "Submitted" | "Viewed" | "Open" | "InProgress" | "Resolved" | "Closed"
+// Backend sends: "Submitted" | "SeenRead" | "Open" | "InProgress" | "AnsweredSolved" | "Redo"
 // Frontend uses the same enum keys internally and displays Persian labels via ticket-status.ts
 const statusFromApi: Record<ApiTicketStatus, TicketStatus> = {
   Submitted: "Submitted",
-  Viewed: "Viewed",
+  SeenRead: "SeenRead",
   Open: "Open",
   InProgress: "InProgress",
-  Resolved: "Resolved",
-  Closed: "Closed",
+  AnsweredSolved: "AnsweredSolved",
+  Redo: "Redo",
 }
 
 const statusToApi: Record<TicketStatus, ApiTicketStatus> = {
   Submitted: "Submitted",
-  Viewed: "Viewed",
+  SeenRead: "SeenRead",
   Open: "Open",
   InProgress: "InProgress",
-  Resolved: "Resolved",
-  Closed: "Closed",
+  AnsweredSolved: "AnsweredSolved",
+  Redo: "Redo",
 }
 
 const priorityFromApi: Record<ApiTicketPriority, TicketPriority> = {
@@ -80,7 +86,8 @@ export const mapApiTicketToUi = (
     id: ticket.id,
     title: ticket.title,
     description: ticket.description,
-    status: mapApiStatusToUi(ticket.status),
+    status: mapApiStatusToUi(ticket.displayStatus ?? ticket.status),
+    canonicalStatus: ticket.canonicalStatus ? mapApiStatusToUi(ticket.canonicalStatus) : mapApiStatusToUi(ticket.status),
     priority: mapApiPriorityToUi(ticket.priority),
     category: categorySlug,
     categoryLabel: categoryEntry?.[1].label ?? ticket.categoryName,
@@ -96,10 +103,13 @@ export const mapApiTicketToUi = (
     createdAt: ticket.createdAt,
     updatedAt: ticket.updatedAt ?? null,
     dueDate: ticket.dueDate ?? null,
+    lastActivityAt: ticket.lastActivityAt ?? null,
     assignedTo: ticket.assignedToUserId ?? null,
     assignedTechnicianName: ticket.assignedTechnicianName ?? ticket.assignedToName ?? null,
     assignedTechnicianEmail: ticket.assignedToEmail ?? null,
     assignedTechnicianPhone: ticket.assignedToPhoneNumber ?? null,
+    assignedTechnicians: ticket.assignedTechnicians ?? [],
+    activities: ticket.activities?.map((activity: ApiTicketActivityDto) => ({ ...activity })) ?? [],
     responses,
   }
 }

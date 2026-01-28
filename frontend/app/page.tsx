@@ -25,6 +25,12 @@ import {
   mapUiStatusToApi,
 } from "@/lib/ticket-mappers";
 import {
+  ensureTicketHubConnection,
+  joinRoleGroup,
+  joinUserGroup,
+  subscribeToTicketUpdates,
+} from "@/lib/ticket-realtime";
+import {
   buildTechnicianProfile,
   type TechnicianProfile,
 } from "@/data/technician-profiles";
@@ -184,6 +190,73 @@ export default function Home() {
     };
     
     void loadData();
+  }, [token, user, categoriesReady]);
+
+  useEffect(() => {
+    if (!token || !user) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void (async () => {
+        const loadedTickets = await loadTickets(
+          token,
+          categoriesReady ? categoriesRef.current : {},
+          user.role,
+        );
+
+        if (user.role === "admin") {
+          await loadTechnicians(token, loadedTickets);
+        }
+      })();
+    }, 30000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [token, user, categoriesReady]);
+
+  useEffect(() => {
+    if (!token || !user) {
+      return;
+    }
+
+    let isActive = true;
+    const roleGroup = user.role === "admin" ? "Admin" : user.role === "engineer" ? "Technician" : "Client";
+
+    const refreshFromRealtime = async () => {
+      if (!isActive) return;
+      const loadedTickets = await loadTickets(
+        token,
+        categoriesReady ? categoriesRef.current : {},
+        user.role,
+      );
+
+      if (user.role === "admin") {
+        await loadTechnicians(token, loadedTickets);
+      }
+    };
+
+    const setupRealtime = async () => {
+      try {
+        await ensureTicketHubConnection(token);
+        await joinUserGroup();
+        await joinRoleGroup(roleGroup);
+      } catch (error) {
+        console.error("Failed to connect to ticket realtime hub", error);
+      }
+    };
+
+    const unsubscribe = subscribeToTicketUpdates(() => {
+      void refreshFromRealtime();
+    });
+
+    void setupRealtime();
+
+    return () => {
+      isActive = false;
+      unsubscribe();
+    };
   }, [token, user, categoriesReady]);
 
   // -------- Ticket handlers (single definitions) --------
@@ -495,10 +568,10 @@ export default function Home() {
         (ticket) => ticket.assignedTechnicianEmail === user.email
       );
       const inProgressCount = technicianTickets.filter(
-        (ticket) => ticket.status === "InProgress"
+        (ticket) => ticket.status === "InProgress" || ticket.status === "Redo"
       ).length;
       const closedCount = technicianTickets.filter(
-        (ticket) => ticket.status === "Resolved" || ticket.status === "Closed"
+        (ticket) => ticket.status === "AnsweredSolved"
       ).length;
 
       return [
@@ -646,34 +719,6 @@ export default function Home() {
         setActiveView((prev) => (prev === next ? prev : next));
       };
 
-      // Load technician-specific tickets
-      const loadTechnicianTickets = async () => {
-        if (!token || user.role !== "engineer") return;
-        try {
-          const apiTickets = await apiRequest<ApiTicketResponse[]>("/api/technician/tickets", {
-            token,
-          });
-
-          const mapped = await Promise.all(
-            apiTickets.map(async (apiTicket) => {
-              const messages = await apiRequest<ApiTicketMessageDto[]>(
-                `/api/tickets/${apiTicket.id}/messages`,
-                { token }
-              );
-              return mapApiTicketToUi(apiTicket, categoriesRef.current, messages.map(mapApiMessageToResponse));
-            })
-          );
-          setTickets(mapped);
-        } catch (error) {
-          console.error("Failed to load technician tickets", error);
-        }
-      };
-
-      // Load technician tickets when engineer logs in
-      if (token && user.role === "engineer") {
-        loadTechnicianTickets();
-      }
-
       return (
         <TechnicianDashboard
           tickets={tickets}
@@ -729,4 +774,3 @@ export default function Home() {
     </DashboardShell>
   );
 }
-

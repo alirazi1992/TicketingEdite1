@@ -200,7 +200,7 @@ public static class SeedData
                     CategoryId = network.Id,
                     SubcategoryId = network.Subcategories.First(sc => sc.Name == "WiFi Problems").Id,
                     Priority = TicketPriority.High,
-                    Status = TicketStatus.Resolved,
+                    Status = TicketStatus.AnsweredSolved,
                     CreatedByUserId = client2.Id,
                     AssignedToUserId = tech1.Id,
                     TechnicianId = techProfile1?.Id,
