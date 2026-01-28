@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Ticketing.Backend.Application.DTOs;
 using Ticketing.Backend.Infrastructure.Data;
 
@@ -14,14 +15,17 @@ public interface INotificationService
 public class NotificationService : INotificationService
 {
     private readonly AppDbContext _context;
+    private readonly ILogger<NotificationService> _logger;
 
-    public NotificationService(AppDbContext context)
+    public NotificationService(AppDbContext context, ILogger<NotificationService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<IEnumerable<NotificationDto>> GetNotificationsAsync(Guid userId)
     {
+        _logger.LogDebug("GetNotificationsAsync: Fetching notifications for UserId={UserId}", userId);
         return await _context.Notifications
             .Where(n => n.UserId == userId)
             .OrderByDescending(n => n.CreatedAt)
