@@ -221,6 +221,12 @@ namespace Ticketing.Backend.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Department")
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
@@ -239,6 +245,11 @@ namespace Ticketing.Backend.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("Phone")
                         .HasMaxLength(20)

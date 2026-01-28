@@ -21,12 +21,13 @@ public enum LinkUserResult
 
 public interface ITechnicianService
 {
-    Task<IEnumerable<TechnicianResponse>> GetAllTechniciansAsync();
+    Task<IEnumerable<TechnicianResponse>> GetAllTechniciansAsync(bool includeDeleted = false);
     Task<TechnicianResponse?> GetTechnicianByIdAsync(Guid id);
     Task<TechnicianResponse> CreateTechnicianAsync(TechnicianCreateRequest request);
     Task<TechnicianResponse?> UpdateTechnicianAsync(Guid id, TechnicianUpdateRequest request);
     Task<bool> UpdateTechnicianStatusAsync(Guid id, bool isActive);
     Task<bool> IsTechnicianActiveAsync(Guid id);
+    Task<(bool found, bool alreadyDeleted)> SoftDeleteTechnicianAsync(Guid id, Guid? deletedByUserId);
     Task<(LinkUserResult result, TechnicianResponse? technician)> LinkUserAsync(Guid technicianId, Guid userId);
 }
 
@@ -41,9 +42,16 @@ public class TechnicianService : ITechnicianService
         _logger = logger;
     }
 
-    public async Task<IEnumerable<TechnicianResponse>> GetAllTechniciansAsync()
+    public async Task<IEnumerable<TechnicianResponse>> GetAllTechniciansAsync(bool includeDeleted = false)
     {
-        var technicians = await _context.Technicians
+        var techniciansQuery = _context.Technicians.AsQueryable();
+
+        if (!includeDeleted)
+        {
+            techniciansQuery = techniciansQuery.Where(t => !t.IsDeleted);
+        }
+
+        var technicians = await techniciansQuery
             .OrderBy(t => t.FullName)
             .ToListAsync();
 
@@ -53,7 +61,7 @@ public class TechnicianService : ITechnicianService
     public async Task<TechnicianResponse?> GetTechnicianByIdAsync(Guid id)
     {
         var technician = await _context.Technicians
-            .FirstOrDefaultAsync(t => t.Id == id);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted);
 
         return technician == null ? null : MapToResponse(technician);
     }
@@ -80,7 +88,7 @@ public class TechnicianService : ITechnicianService
     public async Task<TechnicianResponse?> UpdateTechnicianAsync(Guid id, TechnicianUpdateRequest request)
     {
         var technician = await _context.Technicians
-            .FirstOrDefaultAsync(t => t.Id == id);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted);
 
         if (technician == null)
         {
@@ -101,7 +109,7 @@ public class TechnicianService : ITechnicianService
     public async Task<bool> UpdateTechnicianStatusAsync(Guid id, bool isActive)
     {
         var technician = await _context.Technicians
-            .FirstOrDefaultAsync(t => t.Id == id);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted);
 
         if (technician == null)
         {
@@ -117,9 +125,34 @@ public class TechnicianService : ITechnicianService
     public async Task<bool> IsTechnicianActiveAsync(Guid id)
     {
         var technician = await _context.Technicians
-            .FirstOrDefaultAsync(t => t.Id == id);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted);
 
         return technician != null && technician.IsActive;
+    }
+
+    public async Task<(bool found, bool alreadyDeleted)> SoftDeleteTechnicianAsync(Guid id, Guid? deletedByUserId)
+    {
+        var technician = await _context.Technicians
+            .FirstOrDefaultAsync(t => t.Id == id);
+
+        if (technician == null)
+        {
+            return (false, false);
+        }
+
+        if (technician.IsDeleted)
+        {
+            return (true, true);
+        }
+
+        technician.IsDeleted = true;
+        technician.DeletedAt = DateTime.UtcNow;
+        technician.DeletedByUserId = deletedByUserId;
+        technician.IsActive = false;
+
+        await _context.SaveChangesAsync();
+
+        return (true, false);
     }
 
     /// <summary>
@@ -129,7 +162,7 @@ public class TechnicianService : ITechnicianService
     {
         _logger.LogInformation("LinkUser: Attempting to link Technician {TechnicianId} to User {UserId}", technicianId, userId);
 
-        var technician = await _context.Technicians.FirstOrDefaultAsync(t => t.Id == technicianId);
+        var technician = await _context.Technicians.FirstOrDefaultAsync(t => t.Id == technicianId && !t.IsDeleted);
         if (technician == null)
         {
             _logger.LogWarning("LinkUser FAILED: Technician {TechnicianId} not found", technicianId);
@@ -183,4 +216,3 @@ public class TechnicianService : ITechnicianService
         UserId = technician.UserId // For debugging: null = cannot be assigned
     };
 }
-

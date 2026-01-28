@@ -36,11 +36,15 @@ export interface ApiAssignTechnicianRequest {
 /**
  * Get all technicians (Admin only)
  */
-export async function getAllTechnicians(token: string | null): Promise<ApiTechnicianResponse[]> {
+export async function getAllTechnicians(
+  token: string | null,
+  includeDeleted = false
+): Promise<ApiTechnicianResponse[]> {
   if (!token) {
     throw new Error("Authentication required")
   }
-  return apiRequest<ApiTechnicianResponse[]>("/api/admin/technicians", {
+  const query = includeDeleted ? "?includeDeleted=true" : ""
+  return apiRequest<ApiTechnicianResponse[]>(`/api/admin/technicians${query}`, {
     method: "GET",
     token,
   })
@@ -130,3 +134,18 @@ export async function assignTechnicianToTicket(
   })
 }
 
+/**
+ * Soft delete a technician (Admin only)
+ */
+export async function deleteTechnician(
+  token: string | null,
+  id: string
+): Promise<{ technicianId: string; isDeleted: boolean; alreadyDeleted: boolean }> {
+  if (!token) {
+    throw new Error("Authentication required")
+  }
+  return apiRequest(`/api/admin/technicians/${id}`, {
+    method: "DELETE",
+    token,
+  })
+}

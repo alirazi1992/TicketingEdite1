@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using Ticketing.Backend.Application.DTOs;
 using Ticketing.Backend.Application.Services;
 using Ticketing.Backend.Domain.Enums;
@@ -24,9 +25,9 @@ public class TechniciansController : ControllerBase
     /// Get all technicians
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> GetAllTechnicians()
+    public async Task<IActionResult> GetAllTechnicians([FromQuery] bool includeDeleted = false)
     {
-        var technicians = await _technicianService.GetAllTechniciansAsync();
+        var technicians = await _technicianService.GetAllTechniciansAsync(includeDeleted);
         return Ok(technicians);
     }
 
@@ -117,6 +118,33 @@ public class TechniciansController : ControllerBase
     }
 
     /// <summary>
+    /// Soft delete a technician (admin only).
+    /// </summary>
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> SoftDeleteTechnician(Guid id)
+    {
+        Guid? deletedByUserId = null;
+        var idValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (Guid.TryParse(idValue, out var parsedId))
+        {
+            deletedByUserId = parsedId;
+        }
+
+        var (found, alreadyDeleted) = await _technicianService.SoftDeleteTechnicianAsync(id, deletedByUserId);
+        if (!found)
+        {
+            return NotFound(new { message = "Technician not found", error = "TECHNICIAN_NOT_FOUND" });
+        }
+
+        return Ok(new
+        {
+            technicianId = id,
+            isDeleted = true,
+            alreadyDeleted
+        });
+    }
+
+    /// <summary>
     /// Link a Technician record to a User account (required for Smart Assignment)
     /// </summary>
     /// <remarks>
@@ -150,4 +178,3 @@ public class TechniciansController : ControllerBase
         };
     }
 }
-

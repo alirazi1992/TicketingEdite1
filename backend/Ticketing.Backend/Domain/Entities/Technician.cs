@@ -8,6 +8,9 @@ public class Technician
     public string? Phone { get; set; }
     public string? Department { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
+    public Guid? DeletedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public Guid? UserId { get; set; } // Link to User for authentication
 
@@ -15,4 +18,3 @@ public class Technician
     public User? User { get; set; }
     public ICollection<Ticket> AssignedTickets { get; set; } = new List<Ticket>();
 }
-
