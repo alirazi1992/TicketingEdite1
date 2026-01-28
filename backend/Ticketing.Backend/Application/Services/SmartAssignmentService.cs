@@ -8,27 +8,30 @@ namespace Ticketing.Backend.Application.Services;
 
 public interface ISmartAssignmentService
 {
-    Task<Guid?> AssignTechnicianToTicketAsync(Guid ticketId);
-    Task<int> AssignUnassignedTicketsAsync(DateTime? startDate = null, DateTime? endDate = null);
+    Task<Guid?> AssignTechnicianToTicketAsync(Guid ticketId, Guid actorId);
+    Task<int> AssignUnassignedTicketsAsync(Guid actorId, DateTime? startDate = null, DateTime? endDate = null);
 }
 
 public class SmartAssignmentService : ISmartAssignmentService
 {
     private readonly AppDbContext _context;
-    private readonly ITechnicianService _technicianService;
+    private readonly ITicketService _ticketService;
     private readonly ILogger<SmartAssignmentService> _logger;
 
-    public SmartAssignmentService(AppDbContext context, ITechnicianService technicianService, ILogger<SmartAssignmentService> logger)
+    public SmartAssignmentService(
+        AppDbContext context,
+        ITicketService ticketService,
+        ILogger<SmartAssignmentService> logger)
     {
         _context = context;
-        _technicianService = technicianService;
+        _ticketService = ticketService;
         _logger = logger;
     }
 
     /// <summary>
     /// Assigns a technician to a ticket using least-loaded active technician rule
     /// </summary>
-    public async Task<Guid?> AssignTechnicianToTicketAsync(Guid ticketId)
+    public async Task<Guid?> AssignTechnicianToTicketAsync(Guid ticketId, Guid actorId)
     {
         var ticket = await _context.Tickets
             .FirstOrDefaultAsync(t => t.Id == ticketId);
@@ -57,7 +60,11 @@ public class SmartAssignmentService : ISmartAssignmentService
             var loadCount = await _context.Tickets
                 .CountAsync(t => 
                     t.TechnicianId == tech.Id && 
-                    (t.Status == TicketStatus.Submitted || t.Status == TicketStatus.Viewed || t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress));
+                    (t.Status == TicketStatus.Submitted ||
+                     t.Status == TicketStatus.SeenRead ||
+                     t.Status == TicketStatus.Open ||
+                     t.Status == TicketStatus.InProgress ||
+                     t.Status == TicketStatus.Redo));
 
             technicianLoads.Add((tech.Id, loadCount));
         }
@@ -87,17 +94,11 @@ public class SmartAssignmentService : ISmartAssignmentService
             return null; // Do NOT assign - ticket would remain unassigned in queries
         }
 
-        // Assign technician to ticket - set BOTH TechnicianId AND AssignedToUserId for consistency
-        ticket.TechnicianId = selectedTechnician.TechnicianId;
-        ticket.AssignedToUserId = technician.UserId; // CRITICAL: Set to Technician.UserId for filtering/queries
-        // When assigning, set status to Open (not InProgress) - technician will change to InProgress when they start working
-        if (ticket.Status == TicketStatus.Submitted)
+        var assignmentResult = await _ticketService.AssignTicketAsync(ticketId, selectedTechnician.TechnicianId, actorId);
+        if (assignmentResult == null)
         {
-            ticket.Status = TicketStatus.Open;
+            return null;
         }
-        ticket.UpdatedAt = DateTime.UtcNow;
-
-        await _context.SaveChangesAsync();
 
         _logger.LogInformation(
             "SmartAssignment SUCCESS: Ticket {TicketId} assigned to Technician {TechnicianId} (UserId={UserId})",
@@ -109,7 +110,7 @@ public class SmartAssignmentService : ISmartAssignmentService
     /// <summary>
     /// Assigns all unassigned tickets within a date range (or all if no range specified)
     /// </summary>
-    public async Task<int> AssignUnassignedTicketsAsync(DateTime? startDate = null, DateTime? endDate = null)
+    public async Task<int> AssignUnassignedTicketsAsync(Guid actorId, DateTime? startDate = null, DateTime? endDate = null)
     {
         var query = _context.Tickets
             .Where(t => t.TechnicianId == null)
@@ -130,7 +131,7 @@ public class SmartAssignmentService : ISmartAssignmentService
 
         foreach (var ticket in unassignedTickets)
         {
-            var assignedTechnicianId = await AssignTechnicianToTicketAsync(ticket.Id);
+            var assignedTechnicianId = await AssignTechnicianToTicketAsync(ticket.Id, actorId);
             if (assignedTechnicianId != null)
             {
                 assignedCount++;
@@ -140,4 +141,3 @@ public class SmartAssignmentService : ISmartAssignmentService
         return assignedCount;
     }
 }
-

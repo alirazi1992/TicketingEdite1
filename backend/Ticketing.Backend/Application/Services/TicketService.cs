@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Ticketing.Backend.Application.DTOs;
+using Ticketing.Backend.Api.Hubs;
 using Ticketing.Backend.Domain.Entities;
 using Ticketing.Backend.Domain.Enums;
 using Ticketing.Backend.Infrastructure.Data;
@@ -20,9 +22,11 @@ public interface ITicketService
     Task<TicketResponse?> GetTicketAsync(Guid id, Guid userId, UserRole role);
     Task<TicketResponse?> CreateTicketAsync(Guid userId, TicketCreateRequest request);
     Task<TicketResponse?> UpdateTicketAsync(Guid id, Guid userId, UserRole role, TicketUpdateRequest request);
-    Task<TicketResponse?> AssignTicketAsync(Guid id, Guid technicianId);
+    Task<TicketResponse?> AssignTicketAsync(Guid id, Guid technicianId, Guid actorId);
     Task<IEnumerable<TicketMessageDto>> GetMessagesAsync(Guid ticketId, Guid userId, UserRole role);
     Task<TicketMessageDto?> AddMessageAsync(Guid ticketId, Guid authorId, string message, TicketStatus? status = null);
+    Task<TicketMessageDto?> AddReplyAsync(Guid ticketId, Guid authorId, string message);
+    Task<TicketResponse?> ChangeStatusAsync(Guid ticketId, Guid actorId, TicketStatus newStatus);
     Task<IEnumerable<TicketCalendarResponse>> GetCalendarTicketsAsync(DateTime startDate, DateTime endDate);
 }
 
@@ -32,20 +36,23 @@ public class TicketService : ITicketService
     private readonly INotificationService _notificationService;
     private readonly ITechnicianService _technicianService;
     private readonly ISystemSettingsService _systemSettingsService;
-    private readonly ISmartAssignmentService _smartAssignmentService;
+    private readonly IHubContext<TicketHub> _ticketHub;
+    private readonly ILogger<TicketService> _logger;
 
     public TicketService(
-        AppDbContext context, 
-        INotificationService notificationService, 
+        AppDbContext context,
+        INotificationService notificationService,
         ITechnicianService technicianService,
         ISystemSettingsService systemSettingsService,
-        ISmartAssignmentService smartAssignmentService)
+        IHubContext<TicketHub> ticketHub,
+        ILogger<TicketService> logger)
     {
         _context = context;
         _notificationService = notificationService;
         _technicianService = technicianService;
         _systemSettingsService = systemSettingsService;
-        _smartAssignmentService = smartAssignmentService;
+        _ticketHub = ticketHub;
+        _logger = logger;
     }
 
     public async Task<IEnumerable<TicketResponse>> GetTicketsAsync(Guid userId, UserRole role, TicketStatus? status, TicketPriority? priority, Guid? assignedTo, Guid? createdBy, string? search)
@@ -89,7 +96,7 @@ public class TicketService : ITicketService
         }
 
         var tickets = await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
-        return tickets.Select(MapToResponse);
+        return tickets.Select(ticket => MapToResponse(ticket, role));
     }
 
     public async Task<TicketResponse?> GetTicketAsync(Guid id, Guid userId, UserRole role)
@@ -117,17 +124,59 @@ public class TicketService : ITicketService
             return null;
         }
 
-        // Auto-set Viewed when technician/admin opens ticket detail (if status is Submitted and viewer is not the creator)
-        if (ticket.Status == TicketStatus.Submitted && 
-            ticket.CreatedByUserId != userId && 
+        // Auto-set SeenRead when technician/admin opens ticket detail (if status is Submitted and viewer is not the creator)
+        if (ticket.Status == TicketStatus.Submitted &&
+            ticket.CreatedByUserId != userId &&
             (role == UserRole.Technician || role == UserRole.Admin))
         {
-            ticket.Status = TicketStatus.Viewed;
-            ticket.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            await ChangeStatusAsync(id, userId, TicketStatus.SeenRead);
+            ticket = await _context.Tickets
+                .Include(t => t.Category)
+                .Include(t => t.Subcategory)
+                .Include(t => t.CreatedByUser)
+                .Include(t => t.AssignedToUser)
+                .Include(t => t.Technician)
+                .FirstOrDefaultAsync(t => t.Id == id);
         }
 
-        return MapToResponse(ticket);
+        if (ticket == null)
+        {
+            return null;
+        }
+
+        var replies = await _context.TicketMessages
+            .Include(m => m.AuthorUser)
+            .Where(m => m.TicketId == id)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new TicketMessageDto
+            {
+                Id = m.Id,
+                AuthorUserId = m.AuthorUserId,
+                AuthorName = m.AuthorUser!.FullName,
+                AuthorEmail = m.AuthorUser.Email,
+                Message = m.Message,
+                CreatedAt = m.CreatedAt,
+                Status = m.Status
+            })
+            .ToListAsync();
+
+        var activities = await _context.TicketActivities
+            .Include(a => a.ActorUser)
+            .Where(a => a.TicketId == id)
+            .OrderByDescending(a => a.CreatedAt)
+            .Select(a => new TicketActivityDto
+            {
+                Id = a.Id,
+                ActorUserId = a.ActorUserId,
+                ActorName = a.ActorUser!.FullName,
+                ActorRole = a.ActorUser.Role.ToString(),
+                Type = a.Type,
+                Message = a.Message,
+                CreatedAt = a.CreatedAt
+            })
+            .ToListAsync();
+
+        return MapToResponse(ticket, role, replies, activities);
     }
 
     public async Task<TicketResponse?> CreateTicketAsync(Guid userId, TicketCreateRequest request)
@@ -143,7 +192,8 @@ public class TicketService : ITicketService
             Priority = request.Priority,
             Status = TicketStatus.Submitted,
             CreatedByUserId = userId,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            LastActivityAt = DateTime.UtcNow
         };
 
         _context.Tickets.Add(ticket);
@@ -162,7 +212,7 @@ public class TicketService : ITicketService
             .Include(t => t.Technician)
             .FirstAsync(t => t.Id == ticket.Id);
 
-        return MapToResponse(ticket);
+        return MapToResponse(ticket, UserRole.Client);
     }
 
     public async Task<TicketResponse?> UpdateTicketAsync(Guid id, Guid userId, UserRole role, TicketUpdateRequest request)
@@ -183,58 +233,58 @@ public class TicketService : ITicketService
             return null;
         }
 
+        var hasChanges = false;
+
         if (request.Description != null && role != UserRole.Technician)
         {
             ticket.Description = request.Description;
+            hasChanges = true;
         }
 
         if (request.Priority.HasValue && role != UserRole.Technician)
         {
             ticket.Priority = request.Priority.Value;
+            hasChanges = true;
         }
 
         if (request.Status.HasValue)
         {
-            var newStatus = request.Status.Value;
-            
-            // Validation: Only Admin can set Closed
-            if (newStatus == TicketStatus.Closed && role != UserRole.Admin)
+            try
             {
-                return null; // Forbid - return null to indicate permission denied
-            }
-            
-            // Client restrictions: Cannot set InProgress, Resolved, or Closed
-            if (role == UserRole.Client)
-            {
-                if (newStatus == TicketStatus.InProgress || 
-                    newStatus == TicketStatus.Resolved || 
-                    newStatus == TicketStatus.Closed)
+                var statusResult = await ChangeStatusAsync(id, userId, request.Status.Value);
+                if (statusResult == null)
                 {
-                    return null; // Forbid
+                    return null;
                 }
             }
-            
-            // Technician can set Open, InProgress, Resolved (but not Closed - only Admin)
-            // Admin can set any status including Closed
-            ticket.Status = newStatus;
+            catch (StatusChangeForbiddenException)
+            {
+                return null;
+            }
         }
 
         if (role == UserRole.Admin)
         {
             if (request.AssignedToUserId.HasValue)
             {
-                ticket.AssignedToUserId = request.AssignedToUserId.Value;
+                await UpdateAssignmentAsync(ticket, request.AssignedToUserId.Value, userId);
+                hasChanges = true;
             }
+
             ticket.DueDate = request.DueDate;
+            hasChanges = true;
         }
 
-        ticket.UpdatedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
+        if (hasChanges)
+        {
+            ticket.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
 
         return await GetTicketAsync(id, userId, role);
     }
 
-    public async Task<TicketResponse?> AssignTicketAsync(Guid id, Guid technicianId)
+    public async Task<TicketResponse?> AssignTicketAsync(Guid id, Guid technicianId, Guid actorId)
     {
         var ticket = await _context.Tickets.FirstOrDefaultAsync(t => t.Id == id);
         if (ticket == null)
@@ -246,20 +296,20 @@ public class TicketService : ITicketService
         var technician = await _context.Technicians
             .FirstOrDefaultAsync(t => t.Id == technicianId);
         
-        if (technician == null || !technician.IsActive)
+        if (technician == null || !technician.IsActive || technician.UserId == null)
         {
             return null; // Technician not found or inactive
         }
 
-        // Set both TechnicianId (for display/navigation) and AssignedToUserId (for filtering/queries)
-        ticket.TechnicianId = technicianId;
-        ticket.AssignedToUserId = technician.UserId; // CRITICAL: Set to Technician.UserId (User.Id), not null
+        await UpdateAssignmentAsync(ticket, technician.UserId.Value, actorId, technicianId);
+
         // When assigning, set status to Open (not InProgress) - technician will change to InProgress when they start working
-        ticket.Status = TicketStatus.Open;
+        await ChangeStatusAsync(id, actorId, TicketStatus.Open);
+
         ticket.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        return await GetTicketAsync(id, Guid.Empty, UserRole.Admin);
+        return await GetTicketAsync(id, actorId, UserRole.Admin);
     }
 
     public async Task<IEnumerable<TicketMessageDto>> GetMessagesAsync(Guid ticketId, Guid userId, UserRole role)
@@ -289,6 +339,20 @@ public class TicketService : ITicketService
 
     public async Task<TicketMessageDto?> AddMessageAsync(Guid ticketId, Guid authorId, string message, TicketStatus? status = null)
     {
+        if (status.HasValue)
+        {
+            var statusResult = await ChangeStatusAsync(ticketId, authorId, status.Value);
+            if (statusResult == null)
+            {
+                return null;
+            }
+        }
+
+        return await AddReplyAsync(ticketId, authorId, message);
+    }
+
+    public async Task<TicketMessageDto?> AddReplyAsync(Guid ticketId, Guid authorId, string message)
+    {
         var ticket = await _context.Tickets.FirstOrDefaultAsync(t => t.Id == ticketId);
         if (ticket == null)
         {
@@ -301,64 +365,12 @@ public class TicketService : ITicketService
             return null;
         }
 
-        // Access control: Client can only access their own tickets
-        if (author.Role == UserRole.Client && ticket.CreatedByUserId != authorId)
+        if (!HasTicketAccess(ticket, author))
         {
             return null;
         }
 
-        // Access control: Technician can only access assigned tickets
-        if (author.Role == UserRole.Technician && ticket.TechnicianId != authorId && ticket.AssignedToUserId != authorId)
-        {
-            return null;
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // STATUS CHANGE PERMISSION RULES (SECURITY-CRITICAL)
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // CLOSE (Closed): Admin ONLY
-        // Resolved: Technician & Admin ONLY - Client FORBIDDEN
-        // InProgress: Technician & Admin ONLY - Client FORBIDDEN
-        // Other status changes: Allowed based on role
-        // ═══════════════════════════════════════════════════════════════════════════════
-        if (status.HasValue)
-        {
-            var newStatus = status.Value;
-            
-            // Only Admin can set Closed
-            if (newStatus == TicketStatus.Closed && author.Role != UserRole.Admin)
-            {
-                throw new StatusChangeForbiddenException("Only Admins can close tickets.");
-            }
-            
-            if (author.Role == UserRole.Client)
-            {
-                // Client cannot set InProgress, Resolved, or Closed
-                if (newStatus == TicketStatus.InProgress || 
-                    newStatus == TicketStatus.Resolved || 
-                    newStatus == TicketStatus.Closed)
-                {
-                    throw new StatusChangeForbiddenException("Clients cannot set status to InProgress, Resolved, or Closed.");
-                }
-                // Client can set Submitted, Viewed, Open
-                ticket.Status = newStatus;
-            }
-            else if (author.Role == UserRole.Technician)
-            {
-                // Technician can set Open, InProgress, Resolved (but not Closed)
-                if (newStatus == TicketStatus.Closed)
-                {
-                    throw new StatusChangeForbiddenException("Only Admins can close tickets.");
-                }
-                ticket.Status = newStatus;
-            }
-            else
-            {
-                // Admin can set any status
-                ticket.Status = newStatus;
-            }
-        }
-
+        ticket.LastActivityAt = DateTime.UtcNow;
         ticket.UpdatedAt = DateTime.UtcNow;
 
         var ticketMessage = new TicketMessage
@@ -368,15 +380,18 @@ public class TicketService : ITicketService
             AuthorUserId = authorId,
             Message = message,
             CreatedAt = DateTime.UtcNow,
-            Status = status ?? ticket.Status
+            Status = ticket.Status
         };
 
         _context.TicketMessages.Add(ticketMessage);
+        CreateActivity(ticketId, author, TicketActivityType.ReplyAdded, $"{author.FullName} replied");
+
         await _context.SaveChangesAsync();
 
-        // Notify opposite participant
         var notifyUserId = ticket.AssignedToUserId == authorId ? ticket.CreatedByUserId : ticket.AssignedToUserId ?? ticket.CreatedByUserId;
         await _notificationService.CreateNotificationAsync(notifyUserId, $"New message on ticket '{ticket.Title}'");
+
+        await BroadcastTicketUpdatedAsync(ticket, author, "ReplyAdded");
 
         return await _context.TicketMessages
             .Include(m => m.AuthorUser)
@@ -394,17 +409,62 @@ public class TicketService : ITicketService
             .FirstAsync();
     }
 
+    public async Task<TicketResponse?> ChangeStatusAsync(Guid ticketId, Guid actorId, TicketStatus newStatus)
+    {
+        var ticket = await _context.Tickets.FirstOrDefaultAsync(t => t.Id == ticketId);
+        if (ticket == null)
+        {
+            return null;
+        }
+
+        var actor = await _context.Users.FirstOrDefaultAsync(u => u.Id == actorId);
+        if (actor == null)
+        {
+            return null;
+        }
+
+        if (!HasTicketAccess(ticket, actor))
+        {
+            return null;
+        }
+
+        ValidateStatusChange(actor, newStatus);
+
+        if (ticket.Status == newStatus)
+        {
+            return await GetTicketAsync(ticketId, actorId, actor.Role);
+        }
+
+        var oldStatus = ticket.Status;
+        ticket.Status = newStatus;
+        ticket.LastActivityAt = DateTime.UtcNow;
+        ticket.UpdatedAt = DateTime.UtcNow;
+
+        CreateActivity(ticketId, actor, TicketActivityType.StatusChanged, $"Status changed from {oldStatus} to {newStatus}");
+        await _context.SaveChangesAsync();
+
+        await BroadcastTicketUpdatedAsync(ticket, actor, "StatusChanged");
+
+        return await GetTicketAsync(ticketId, actorId, actor.Role);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // MANUAL TEST CHECKLIST (Swagger):
     // 1. POST /api/Tickets → status=Submitted, assignedToUserId=null, assignedToName/email/phone=null
     // 2. POST /api/admin/assignment/smart/run → assignedCount > 0 (if eligible unassigned tickets exist)
     // 3. GET /api/technician/tickets (as assigned tech) → ticket appears in list
     // ═══════════════════════════════════════════════════════════════════════════════
-    private static TicketResponse MapToResponse(Ticket ticket)
+    private static TicketResponse MapToResponse(
+        Ticket ticket,
+        UserRole role,
+        IEnumerable<TicketMessageDto>? replies = null,
+        IEnumerable<TicketActivityDto>? activities = null)
     {
         // SECURITY-CRITICAL: Only show assigned technician info when ticket is truly assigned
         // "Truly assigned" = AssignedToUserId is not null (the authoritative field for filtering/queries)
         var isAssigned = ticket.AssignedToUserId != null;
+        var displayStatus = MapStatusForRole(ticket.Status, role);
+        var assignedTechnicians = BuildAssignedTechnicians(ticket);
         
         return new TicketResponse
         {
@@ -417,6 +477,9 @@ public class TicketService : ITicketService
             SubcategoryName = ticket.Subcategory?.Name,
             Priority = ticket.Priority,
             Status = ticket.Status,
+            CanonicalStatus = ticket.Status,
+            DisplayStatus = displayStatus,
+            LastActivityAt = ticket.LastActivityAt ?? ticket.UpdatedAt ?? ticket.CreatedAt,
             CreatedByUserId = ticket.CreatedByUserId,
             CreatedByName = ticket.CreatedByUser?.FullName ?? string.Empty,
             CreatedByEmail = ticket.CreatedByUser?.Email ?? string.Empty,
@@ -428,10 +491,160 @@ public class TicketService : ITicketService
             AssignedToEmail = isAssigned ? (ticket.Technician?.Email ?? ticket.AssignedToUser?.Email) : null,
             AssignedToPhoneNumber = isAssigned ? (ticket.Technician?.Phone ?? ticket.AssignedToUser?.PhoneNumber) : null,
             AssignedTechnicianName = isAssigned ? (ticket.Technician?.FullName ?? ticket.AssignedToUser?.FullName) : null,
+            AssignedTechnicians = assignedTechnicians,
             CreatedAt = ticket.CreatedAt,
             UpdatedAt = ticket.UpdatedAt,
-            DueDate = ticket.DueDate
+            DueDate = ticket.DueDate,
+            Replies = replies?.ToList() ?? new List<TicketMessageDto>(),
+            Activities = activities?.ToList() ?? new List<TicketActivityDto>()
         };
+    }
+
+    private static TicketStatus MapStatusForRole(TicketStatus status, UserRole role)
+    {
+        return role == UserRole.Client && status == TicketStatus.Redo
+            ? TicketStatus.InProgress
+            : status;
+    }
+
+    private static List<AssignedTechnicianDto> BuildAssignedTechnicians(Ticket ticket)
+    {
+        if (ticket.AssignedToUserId == null)
+        {
+            return new List<AssignedTechnicianDto>();
+        }
+
+        var name = ticket.Technician?.FullName ?? ticket.AssignedToUser?.FullName ?? string.Empty;
+        var email = ticket.Technician?.Email ?? ticket.AssignedToUser?.Email;
+
+        return new List<AssignedTechnicianDto>
+        {
+            new()
+            {
+                UserId = ticket.AssignedToUserId.Value,
+                Name = name,
+                Email = email
+            }
+        };
+    }
+
+    private static bool HasTicketAccess(Ticket ticket, User actor)
+    {
+        if (actor.Role == UserRole.Client)
+        {
+            return ticket.CreatedByUserId == actor.Id;
+        }
+
+        if (actor.Role == UserRole.Technician)
+        {
+            return ticket.TechnicianId == actor.Id || ticket.AssignedToUserId == actor.Id;
+        }
+
+        return true;
+    }
+
+    private static void ValidateStatusChange(User actor, TicketStatus newStatus)
+    {
+        if (actor.Role == UserRole.Client)
+        {
+            if (newStatus == TicketStatus.InProgress ||
+                newStatus == TicketStatus.AnsweredSolved ||
+                newStatus == TicketStatus.Redo)
+            {
+                throw new StatusChangeForbiddenException("Clients cannot set status to InProgress, AnsweredSolved, or Redo.");
+            }
+        }
+    }
+
+    private void CreateActivity(Guid ticketId, User actor, TicketActivityType type, string message)
+    {
+        var activity = new TicketActivity
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            ActorUserId = actor.Id,
+            Type = type,
+            Message = message,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.TicketActivities.Add(activity);
+    }
+
+    private async Task BroadcastTicketUpdatedAsync(Ticket ticket, User actor, string updateType)
+    {
+        var payload = new TicketUpdatedEvent
+        {
+            TicketId = ticket.Id,
+            CanonicalStatus = ticket.Status,
+            DisplayStatusByRole = new Dictionary<string, TicketStatus>
+            {
+                { nameof(UserRole.Client), MapStatusForRole(ticket.Status, UserRole.Client) },
+                { nameof(UserRole.Technician), MapStatusForRole(ticket.Status, UserRole.Technician) },
+                { nameof(UserRole.Admin), MapStatusForRole(ticket.Status, UserRole.Admin) }
+            },
+            LastActivityAt = ticket.LastActivityAt ?? ticket.UpdatedAt ?? ticket.CreatedAt,
+            UpdateType = updateType,
+            ActorName = actor.FullName,
+            ActorRole = actor.Role.ToString()
+        };
+
+        var groupName = $"ticket:{ticket.Id}";
+        var targetUserIds = new HashSet<Guid> { ticket.CreatedByUserId };
+        if (ticket.AssignedToUserId.HasValue)
+        {
+            targetUserIds.Add(ticket.AssignedToUserId.Value);
+        }
+
+        try
+        {
+            await _ticketHub.Clients.Group(groupName).SendAsync("TicketUpdated", payload);
+
+            foreach (var userId in targetUserIds)
+            {
+                await _ticketHub.Clients.Group($"user:{userId}").SendAsync("TicketUpdated", payload);
+            }
+
+            await _ticketHub.Clients.Group("role:Admin").SendAsync("TicketUpdated", payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to broadcast TicketUpdated for TicketId={TicketId}", ticket.Id);
+        }
+    }
+
+    private async Task UpdateAssignmentAsync(Ticket ticket, Guid assignedUserId, Guid actorId, Guid? technicianIdOverride = null)
+    {
+        if (ticket.AssignedToUserId == assignedUserId && ticket.TechnicianId == technicianIdOverride)
+        {
+            return;
+        }
+
+        var actor = await _context.Users.FirstOrDefaultAsync(u => u.Id == actorId);
+        if (actor == null)
+        {
+            return;
+        }
+
+        ticket.AssignedToUserId = assignedUserId;
+
+        if (technicianIdOverride.HasValue)
+        {
+            ticket.TechnicianId = technicianIdOverride.Value;
+        }
+        else
+        {
+            var technician = await _context.Technicians.FirstOrDefaultAsync(t => t.UserId == assignedUserId);
+            ticket.TechnicianId = technician?.Id;
+        }
+
+        ticket.LastActivityAt = DateTime.UtcNow;
+        ticket.UpdatedAt = DateTime.UtcNow;
+
+        CreateActivity(ticket.Id, actor, TicketActivityType.AssignmentChanged, $"Assigned to user {assignedUserId}");
+        await _context.SaveChangesAsync();
+
+        await BroadcastTicketUpdatedAsync(ticket, actor, "AssignmentChanged");
     }
 
     public async Task<IEnumerable<TicketCalendarResponse>> GetCalendarTicketsAsync(DateTime startDate, DateTime endDate)
@@ -450,7 +663,7 @@ public class TicketService : ITicketService
             Id = t.Id,
             TicketNumber = $"T-{t.Id.ToString("N").Substring(0, 8).ToUpper()}",
             Title = t.Title,
-            Status = t.Status,
+            Status = MapStatusForRole(t.Status, UserRole.Admin),
             Priority = t.Priority,
             CategoryName = t.Category?.Name ?? string.Empty,
             // Only show technician name when truly assigned (AssignedToUserId != null)
@@ -460,4 +673,3 @@ public class TicketService : ITicketService
         });
     }
 }
-

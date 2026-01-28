@@ -57,11 +57,11 @@ interface CurrentUser {
 
 const statusColors: Record<TicketStatus, string> = {
   Submitted: "bg-blue-100 text-blue-800 border-blue-200",
-  Viewed: "bg-cyan-100 text-cyan-800 border-cyan-200",
+  SeenRead: "bg-cyan-100 text-cyan-800 border-cyan-200",
   Open: "bg-red-100 text-red-800 border-red-200",
   InProgress: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  Resolved: "bg-green-100 text-green-800 border-green-200",
-  Closed: "bg-gray-100 text-gray-800 border-gray-200",
+  AnsweredSolved: "bg-green-100 text-green-800 border-green-200",
+  Redo: "bg-orange-100 text-orange-800 border-orange-200",
 };
 
 const statusLabels = TICKET_STATUS_LABELS;
@@ -154,7 +154,7 @@ export function ClientDashboard({
 
   const openTickets = userTickets.filter((t) => t.status === "Open");
   const inProgressTickets = userTickets.filter((t) => t.status === "InProgress");
-  const resolvedTickets = userTickets.filter((t) => t.status === "Resolved");
+  const resolvedTickets = userTickets.filter((t) => t.status === "AnsweredSolved");
 
   const handleViewTicket = (ticket: Ticket) => {
     setSelectedTicket(ticket);
@@ -374,11 +374,10 @@ export function ClientDashboard({
               <SelectContent className="font-iran">
                 <SelectItem value="all">همه وضعیت‌ها</SelectItem>
                 <SelectItem value="Submitted">{TICKET_STATUS_LABELS.Submitted}</SelectItem>
-                <SelectItem value="Viewed">{TICKET_STATUS_LABELS.Viewed}</SelectItem>
+                <SelectItem value="SeenRead">{TICKET_STATUS_LABELS.SeenRead}</SelectItem>
                 <SelectItem value="Open">{TICKET_STATUS_LABELS.Open}</SelectItem>
                 <SelectItem value="InProgress">{TICKET_STATUS_LABELS.InProgress}</SelectItem>
-                <SelectItem value="Resolved">{TICKET_STATUS_LABELS.Resolved}</SelectItem>
-                <SelectItem value="Closed">{TICKET_STATUS_LABELS.Closed}</SelectItem>
+                <SelectItem value="AnsweredSolved">{TICKET_STATUS_LABELS.AnsweredSolved}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -742,6 +741,5 @@ export function ClientDashboard({
     </div>
   );
 }
-
 
 

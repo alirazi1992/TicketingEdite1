@@ -282,6 +282,9 @@ namespace Ticketing.Backend.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("LastActivityAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Priority")
                         .HasColumnType("INTEGER");
 
@@ -315,6 +318,38 @@ namespace Ticketing.Backend.Infrastructure.Data.Migrations
                     b.HasIndex("TechnicianId");
 
                     b.ToTable("Tickets");
+                });
+
+            modelBuilder.Entity("Ticketing.Backend.Domain.Entities.TicketActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("TicketId");
+
+                    b.ToTable("TicketActivities");
                 });
 
             modelBuilder.Entity("Ticketing.Backend.Domain.Entities.TicketMessage", b =>
@@ -532,6 +567,25 @@ namespace Ticketing.Backend.Infrastructure.Data.Migrations
                     b.Navigation("Technician");
                 });
 
+            modelBuilder.Entity("Ticketing.Backend.Domain.Entities.TicketActivity", b =>
+                {
+                    b.HasOne("Ticketing.Backend.Domain.Entities.User", "ActorUser")
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Ticketing.Backend.Domain.Entities.Ticket", "Ticket")
+                        .WithMany("Activities")
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ActorUser");
+
+                    b.Navigation("Ticket");
+                });
+
             modelBuilder.Entity("Ticketing.Backend.Domain.Entities.TicketMessage", b =>
                 {
                     b.HasOne("Ticketing.Backend.Domain.Entities.User", "AuthorUser")
@@ -582,6 +636,8 @@ namespace Ticketing.Backend.Infrastructure.Data.Migrations
             modelBuilder.Entity("Ticketing.Backend.Domain.Entities.Ticket", b =>
                 {
                     b.Navigation("Attachments");
+
+                    b.Navigation("Activities");
 
                     b.Navigation("Messages");
                 });

@@ -16,6 +16,7 @@ public class Ticket
     public Guid? TechnicianId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public DateTime? LastActivityAt { get; set; }
     public DateTime? DueDate { get; set; }
 
     public Category? Category { get; set; }
@@ -24,5 +25,6 @@ public class Ticket
     public User? AssignedToUser { get; set; }
     public Technician? Technician { get; set; }
     public ICollection<TicketMessage> Messages { get; set; } = new List<TicketMessage>();
+    public ICollection<TicketActivity> Activities { get; set; } = new List<TicketActivity>();
     public ICollection<Attachment> Attachments { get; set; } = new List<Attachment>();
 }

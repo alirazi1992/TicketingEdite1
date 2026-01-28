@@ -6,6 +6,12 @@ import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/api-client";
 import type { ApiTicketResponse, ApiTicketMessageDto } from "@/lib/api-types";
 import { mapApiTicketToUi, mapApiMessageToResponse } from "@/lib/ticket-mappers";
+import {
+  ensureTicketHubConnection,
+  joinTicketGroup,
+  joinUserGroup,
+  subscribeToTicketUpdates,
+} from "@/lib/ticket-realtime";
 import { useCategories } from "@/services/useCategories";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,11 +23,11 @@ import { TICKET_STATUS_LABELS, getTicketStatusLabel, type TicketStatus } from "@
 
 const statusColors: Record<TicketStatus, string> = {
   Submitted: "bg-blue-100 text-blue-700 border border-blue-200",
-  Viewed: "bg-purple-100 text-purple-700 border border-purple-200",
+  SeenRead: "bg-purple-100 text-purple-700 border border-purple-200",
   Open: "bg-rose-100 text-rose-700 border border-rose-200",
   InProgress: "bg-amber-100 text-amber-700 border border-amber-200",
-  Resolved: "bg-emerald-100 text-emerald-700 border border-emerald-200",
-  Closed: "bg-slate-100 text-slate-700 border border-slate-200",
+  AnsweredSolved: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  Redo: "bg-orange-100 text-orange-700 border border-orange-200",
 };
 
 const priorityLabels: Record<string, string> = {
@@ -51,12 +57,14 @@ export default function TicketDetailPage() {
 
     const loadTicket = async () => {
       try {
-        const [ticketDetails, messages] = await Promise.all([
-          apiRequest<ApiTicketResponse>(`/api/tickets/${ticketId}`, { token }),
-          apiRequest<ApiTicketMessageDto[]>(`/api/tickets/${ticketId}/messages`, { token }),
-        ]);
+        const ticketDetails = await apiRequest<ApiTicketResponse>(`/api/tickets/${ticketId}`, { token });
+        const responses =
+          ticketDetails.replies?.map(mapApiMessageToResponse) ??
+          (await apiRequest<ApiTicketMessageDto[]>(`/api/tickets/${ticketId}/messages`, { token })).map(
+            mapApiMessageToResponse,
+          );
 
-        const mapped = mapApiTicketToUi(ticketDetails, categories, messages.map(mapApiMessageToResponse));
+        const mapped = mapApiTicketToUi(ticketDetails, categories, responses);
         setTicket(mapped);
       } catch (err: any) {
         console.error("Failed to load ticket:", err);
@@ -67,6 +75,52 @@ export default function TicketDetailPage() {
     };
 
     loadTicket();
+  }, [token, ticketId, categories]);
+
+  useEffect(() => {
+    if (!token || !ticketId) {
+      return;
+    }
+
+    let isActive = true;
+
+    const refreshTicket = async () => {
+      if (!isActive) return;
+      try {
+        const ticketDetails = await apiRequest<ApiTicketResponse>(`/api/tickets/${ticketId}`, { token });
+        const responses =
+          ticketDetails.replies?.map(mapApiMessageToResponse) ??
+          (await apiRequest<ApiTicketMessageDto[]>(`/api/tickets/${ticketId}/messages`, { token })).map(
+            mapApiMessageToResponse,
+          );
+        const mapped = mapApiTicketToUi(ticketDetails, categories, responses);
+        setTicket(mapped);
+      } catch (err) {
+        console.error("Failed to refresh ticket:", err);
+      }
+    };
+
+    const setupRealtime = async () => {
+      try {
+        await ensureTicketHubConnection(token);
+        await joinUserGroup();
+        await joinTicketGroup(ticketId);
+      } catch (error) {
+        console.error("Failed to connect to ticket realtime hub", error);
+      }
+    };
+
+    const unsubscribe = subscribeToTicketUpdates((event) => {
+      if (event.ticketId !== ticketId) return;
+      void refreshTicket();
+    });
+
+    void setupRealtime();
+
+    return () => {
+      isActive = false;
+      unsubscribe();
+    };
   }, [token, ticketId, categories]);
 
   if (loading) {
@@ -186,4 +240,3 @@ export default function TicketDetailPage() {
     </div>
   );
 }
-

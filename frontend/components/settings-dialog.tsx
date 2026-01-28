@@ -191,7 +191,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       defaultTheme: "system",
       timezone: "Asia/Tehran",
       defaultPriority: "Medium",
-      defaultStatus: "New",
+      defaultStatus: "Submitted",
       responseSlaHours: 24,
       autoAssignEnabled: false,
       allowClientAttachments: true,
@@ -1399,11 +1399,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="New">جدید</SelectItem>
+                                  <SelectItem value="Submitted">ثبت شد</SelectItem>
+                                  <SelectItem value="SeenRead">دیده شد</SelectItem>
+                                  <SelectItem value="Open">باز</SelectItem>
                                   <SelectItem value="InProgress">در حال انجام</SelectItem>
-                                  <SelectItem value="WaitingForClient">منتظر پاسخ</SelectItem>
-                                  <SelectItem value="Resolved">حل شده</SelectItem>
-                                  <SelectItem value="Closed">بسته شده</SelectItem>
+                                  <SelectItem value="AnsweredSolved">پاسخ داده شد</SelectItem>
+                                  <SelectItem value="Redo">نیاز به بازبینی</SelectItem>
                                 </SelectContent>
                               </Select>
                             )}

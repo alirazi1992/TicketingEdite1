@@ -50,7 +50,7 @@ import { TICKET_STATUS_LABELS } from "@/lib/ticket-status";
 type FilterStatus = "all" | TicketStatus;
 type FilterPriority = "all" | TicketPriority;
 
-type SummaryScope = "all" | "Open" | "InProgress" | "Resolved";
+type SummaryScope = "all" | "Open" | "InProgress" | "AnsweredSolved";
 
 interface User {
   name?: string;
@@ -69,11 +69,11 @@ interface TechnicianDashboardProps {
 /* =================== LABELS / COLORS =================== */
 const statusColors: Record<TicketStatus, string> = {
   Submitted: "bg-blue-100 text-blue-800 border-blue-200",
-  Viewed: "bg-cyan-100 text-cyan-800 border-cyan-200",
+  SeenRead: "bg-cyan-100 text-cyan-800 border-cyan-200",
   Open: "bg-red-100 text-red-800 border-red-200",
   InProgress: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  Resolved: "bg-green-100 text-green-800 border-green-200",
-  Closed: "bg-gray-100 text-gray-800 border-gray-200",
+  AnsweredSolved: "bg-green-100 text-green-800 border-green-200",
+  Redo: "bg-orange-100 text-orange-800 border-orange-200",
 };
 
 const statusLabels = TICKET_STATUS_LABELS;
@@ -144,7 +144,7 @@ export function TechnicianDashboard({
     }
     if (activeSection === "history") {
       cardOverrideRef.current = null;
-      setSelectedScope('Resolved');
+      setSelectedScope('AnsweredSolved');
       setFilterStatus('all');
       setFilterPriority('all');
       return;
@@ -176,9 +176,9 @@ export function TechnicianDashboard({
       case "Open":
         return ticket.status === "Open";
       case "InProgress":
-        return ticket.status === "InProgress";
-      case "Resolved":
-        return ticket.status === "Resolved" || ticket.status === "Closed";
+        return ticket.status === "InProgress" || ticket.status === "Redo";
+      case "AnsweredSolved":
+        return ticket.status === "AnsweredSolved";
       case "all":
       default:
         return true;
@@ -207,8 +207,10 @@ export function TechnicianDashboard({
 
   const totalTickets = technicianTickets.length;
   const openTickets = technicianTickets.filter((t) => t.status === "Open").length;
-  const inProgressTickets = technicianTickets.filter((t) => t.status === "InProgress").length;
-  const resolvedTickets = technicianTickets.filter((t) => t.status === "Resolved" || t.status === "Closed").length;
+  const inProgressTickets = technicianTickets.filter(
+    (t) => t.status === "InProgress" || t.status === "Redo",
+  ).length;
+  const resolvedTickets = technicianTickets.filter((t) => t.status === "AnsweredSolved").length;
 
   const summaryCards = [
     {
@@ -242,12 +244,12 @@ export function TechnicianDashboard({
       iconColor: "text-blue-500",
     },
     {
-      id: "Resolved",
-      title: "حل شده",
-      description: "تیکت‌هایی که بسته شده‌اند",
+      id: "AnsweredSolved",
+      title: "پاسخ داده شد",
+      description: "تیکت‌هایی که پاسخ نهایی دریافت کرده‌اند",
       value: resolvedTickets,
       icon: CheckCircle,
-      scope: "Resolved" as SummaryScope,
+      scope: "AnsweredSolved" as SummaryScope,
       section: "history" as const,
       iconColor: "text-green-500",
     },
@@ -257,7 +259,7 @@ export function TechnicianDashboard({
     all: "assigned",
     Open: "assigned",
     InProgress: "in-progress",
-    Resolved: "history",
+    AnsweredSolved: "history",
   };
 
   const handleSummaryClick = (card: (typeof summaryCards)[number]) => {
@@ -494,11 +496,11 @@ export function TechnicianDashboard({
               <SelectContent className="font-iran">
                 <SelectItem value="all">همه وضعیت‌ها</SelectItem>
                 <SelectItem value="Submitted">{TICKET_STATUS_LABELS.Submitted}</SelectItem>
-                <SelectItem value="Viewed">{TICKET_STATUS_LABELS.Viewed}</SelectItem>
+                <SelectItem value="SeenRead">{TICKET_STATUS_LABELS.SeenRead}</SelectItem>
                 <SelectItem value="Open">{TICKET_STATUS_LABELS.Open}</SelectItem>
                 <SelectItem value="InProgress">{TICKET_STATUS_LABELS.InProgress}</SelectItem>
-                <SelectItem value="Resolved">{TICKET_STATUS_LABELS.Resolved}</SelectItem>
-                <SelectItem value="Closed">{TICKET_STATUS_LABELS.Closed}</SelectItem>
+                <SelectItem value="AnsweredSolved">{TICKET_STATUS_LABELS.AnsweredSolved}</SelectItem>
+                <SelectItem value="Redo">{TICKET_STATUS_LABELS.Redo}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -890,11 +892,11 @@ export function TechnicianDashboard({
                 </SelectTrigger>
                 <SelectContent className="font-iran">
                   <SelectItem value="Submitted">{TICKET_STATUS_LABELS.Submitted}</SelectItem>
-                  <SelectItem value="Viewed">{TICKET_STATUS_LABELS.Viewed}</SelectItem>
+                  <SelectItem value="SeenRead">{TICKET_STATUS_LABELS.SeenRead}</SelectItem>
                   <SelectItem value="Open">{TICKET_STATUS_LABELS.Open}</SelectItem>
                   <SelectItem value="InProgress">{TICKET_STATUS_LABELS.InProgress}</SelectItem>
-                  <SelectItem value="Resolved">{TICKET_STATUS_LABELS.Resolved}</SelectItem>
-                  <SelectItem value="Closed">{TICKET_STATUS_LABELS.Closed}</SelectItem>
+                  <SelectItem value="AnsweredSolved">{TICKET_STATUS_LABELS.AnsweredSolved}</SelectItem>
+                  <SelectItem value="Redo">{TICKET_STATUS_LABELS.Redo}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -934,4 +936,3 @@ export function TechnicianDashboard({
     </div>
   );
 }
-

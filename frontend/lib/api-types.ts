@@ -28,7 +28,23 @@ export interface ApiSubcategoryResponse {
 }
 
 export type ApiTicketPriority = "Low" | "Medium" | "High" | "Critical"
-export type ApiTicketStatus = "Submitted" | "Viewed" | "Open" | "InProgress" | "Resolved" | "Closed"
+export type ApiTicketStatus = "Submitted" | "SeenRead" | "Open" | "InProgress" | "AnsweredSolved" | "Redo"
+
+export interface ApiAssignedTechnicianDto {
+  userId: string
+  name: string
+  email?: string | null
+}
+
+export interface ApiTicketActivityDto {
+  id: string
+  actorUserId: string
+  actorName: string
+  actorRole: string
+  type: "ReplyAdded" | "StatusChanged" | "AssignmentChanged"
+  message: string
+  createdAt: string
+}
 
 export interface ApiTicketResponse {
   id: string
@@ -40,6 +56,9 @@ export interface ApiTicketResponse {
   subcategoryName?: string | null
   priority: ApiTicketPriority
   status: ApiTicketStatus
+  canonicalStatus: ApiTicketStatus
+  displayStatus: ApiTicketStatus
+  lastActivityAt?: string | null
   createdByUserId: string
   createdByName: string
   createdByEmail: string
@@ -49,9 +68,12 @@ export interface ApiTicketResponse {
   assignedToName?: string | null
   assignedToEmail?: string | null
   assignedToPhoneNumber?: string | null
+  assignedTechnicians?: ApiAssignedTechnicianDto[]
   createdAt: string
   updatedAt?: string | null
   dueDate?: string | null
+  replies?: ApiTicketMessageDto[]
+  activities?: ApiTicketActivityDto[]
 }
 
 export interface ApiTicketMessageDto {
@@ -62,6 +84,16 @@ export interface ApiTicketMessageDto {
   message: string
   createdAt: string
   status?: ApiTicketStatus | null
+}
+
+export interface ApiTicketUpdatedEvent {
+  ticketId: string
+  canonicalStatus: ApiTicketStatus
+  displayStatusByRole?: Record<string, ApiTicketStatus>
+  lastActivityAt?: string | null
+  updateType: "StatusChanged" | "ReplyAdded" | "AssignmentChanged"
+  actorName: string
+  actorRole: string
 }
 
 export interface ApiSystemSettingsResponse {

@@ -1,4 +1,10 @@
-export type TicketStatus = "Submitted" | "Viewed" | "Open" | "InProgress" | "Resolved" | "Closed"
+export type TicketStatus =
+  | "Submitted"
+  | "SeenRead"
+  | "Open"
+  | "InProgress"
+  | "AnsweredSolved"
+  | "Redo"
 export type TicketPriority = "low" | "medium" | "high" | "urgent"
 export type TicketCategory = string
 
@@ -16,6 +22,7 @@ export interface Ticket {
   title: string
   description: string
   status: TicketStatus
+  canonicalStatus?: TicketStatus
   priority: TicketPriority
   category: TicketCategory
   categoryLabel?: string
@@ -30,11 +37,14 @@ export interface Ticket {
   clientId?: string
   createdAt: string
   updatedAt?: string | null
+  lastActivityAt?: string | null
   dueDate?: string | null
   assignedTo?: string | null
   assignedTechnicianName?: string | null
   assignedTechnicianEmail?: string | null
   assignedTechnicianPhone?: string | null
+  assignedTechnicians?: Array<{ userId: string; name: string; email?: string | null }>
+  activities?: Array<Record<string, unknown>>
   responses?: TicketResponse[]
   attachments?: Array<Record<string, unknown>>
   dynamicFields?: Record<string, unknown>
