@@ -37,10 +37,17 @@ var sqliteDbPath = ResolveSqliteDbPath(builder.Configuration, builder.Environmen
 var sqliteConnectionString = $"Data Source={sqliteDbPath}";
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(sqliteConnectionString));
+{
+    options.UseSqlite(sqliteConnectionString);
+    options.EnableDetailedErrors(builder.Environment.IsDevelopment());
+    options.EnableSensitiveDataLogging(builder.Environment.IsDevelopment());
+    options.LogTo(Console.WriteLine, LogLevel.Error);
+});
 
 // Log resolved path at startup (safe: no secrets)
 Console.WriteLine($"[STARTUP] Resolved SQLite DB Path: {sqliteDbPath}");
+Console.WriteLine($"[STARTUP] Content Root: {builder.Environment.ContentRootPath}");
+Console.WriteLine($"[STARTUP] SQLite DB Exists: {File.Exists(sqliteDbPath)}");
 
 // Helper: Resolve SQLite DB path to absolute path under ContentRoot
 static string ResolveSqliteDbPath(IConfiguration config, string contentRoot)
@@ -48,7 +55,7 @@ static string ResolveSqliteDbPath(IConfiguration config, string contentRoot)
     var connectionString = config.GetConnectionString("DefaultConnection");
     
     // Default relative path if not configured
-    var relativePath = "App_Data/ticketing.db";
+    var relativePath = "ticketing.db";
     
     if (!string.IsNullOrWhiteSpace(connectionString))
     {
@@ -226,8 +233,17 @@ using (var scope = app.Services.CreateScope())
     var context = services.GetRequiredService<AppDbContext>();
     var passwordHasher = services.GetRequiredService<IPasswordHasher<User>>();
 
-    await context.Database.MigrateAsync();
-    await SeedData.InitializeAsync(context, passwordHasher);
+    try
+    {
+        await context.Database.MigrateAsync();
+        await SeedData.InitializeAsync(context, passwordHasher);
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+        logger.LogError(ex, "Database migration or seeding failed. Check connection string and file path.");
+        throw;
+    }
 }
 
 // =======================

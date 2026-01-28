@@ -1,6 +1,12 @@
 // lib/api-client.ts
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, "") || "http://localhost:5000";
+
+if (!process.env.NEXT_PUBLIC_API_BASE_URL) {
+  console.warn(
+    `[apiRequest] NEXT_PUBLIC_API_BASE_URL not set; defaulting to ${API_BASE_URL}.`
+  );
+}
 const NOTIFICATION_CACHE_TTL_MS = 60000;
 const notificationCache = new Map<
   string,
@@ -59,6 +65,14 @@ export async function apiRequest<TResponse>(
       clearTimeout(timeoutId);
       if (error.name === "AbortError") {
         throw new Error("Request timeout: Backend server may not be responding");
+      }
+      if (!silent) {
+        console.error(`[apiRequest] NETWORK ERROR ${method} ${url}:`, {
+          message: error?.message,
+          baseUrl: API_BASE_URL,
+          path: path,
+          hasToken: !!token,
+        });
       }
       throw error;
     }
