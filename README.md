@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # TIQ - Ticketing System
 
 A full-stack ticketing system with Next.js frontend and .NET backend.
@@ -148,3 +149,6 @@ dotnet build
 - The backend database is automatically migrated and seeded on startup
 - CORS is configured to allow requests from `http://localhost:3000`
 - Build artifacts (`.next/`, `node_modules/`, `bin/`, `obj/`) are gitignored
+=======
+# TicketingEdite1
+>>>>>>> c8ad6a162c19793f77146914a01f1312f4fdbb32
