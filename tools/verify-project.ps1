@@ -113,7 +113,7 @@ if (Test-Path $backendPath) {
 }
 
 # Check VS Code settings
-Write-Host "`n⚙️  Checking VS Code/Cursor settings..." -ForegroundColor Yellow
+Write-Host "`n⚙️  Checking VS Code settings..." -ForegroundColor Yellow
 $vscodeSettings = Join-Path $projectRoot ".vscode\settings.json"
 if (Test-Path $vscodeSettings) {
     Write-Host "✅ .vscode/settings.json exists" -ForegroundColor Green
@@ -163,4 +163,3 @@ return @{
     Warnings = $warnings
     Errors = $errors
 }
-
